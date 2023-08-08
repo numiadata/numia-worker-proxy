@@ -1,32 +1,48 @@
-/**
- * Welcome to Cloudflare Workers! This is your first worker.
- *
- * - Run `npm run dev` in your terminal to start a development server
- * - Open a browser tab at http://localhost:8787/ to see your worker in action
- * - Run `npm run deploy` to publish your worker
- *
- * Learn more at https://developers.cloudflare.com/workers/
- */
-
 export interface Env {
-	// Example binding to KV. Learn more at https://developers.cloudflare.com/workers/runtime-apis/kv/
-	// MY_KV_NAMESPACE: KVNamespace;
-	//
-	// Example binding to Durable Object. Learn more at https://developers.cloudflare.com/workers/runtime-apis/durable-objects/
-	// MY_DURABLE_OBJECT: DurableObjectNamespace;
-	//
-	// Example binding to R2. Learn more at https://developers.cloudflare.com/workers/runtime-apis/r2/
-	// MY_BUCKET: R2Bucket;
-	//
-	// Example binding to a Service. Learn more at https://developers.cloudflare.com/workers/runtime-apis/service-bindings/
-	// MY_SERVICE: Fetcher;
-	//
-	// Example binding to a Queue. Learn more at https://developers.cloudflare.com/queues/javascript-apis/
-	// MY_QUEUE: Queue;
+	NUMIA_API_KEY: string;
 }
+
+/**
+ * /osmosis-rpc/block -> https://osmosis-rpc.numia.xyz/block
+ * /osmosis-lcd/cosmos/base/tendermint/v1beta1/blocks/10704303 -> https://osmosis-lcd.numia.xyz/cosmos/base/tendermint/v1beta1/blocks/10704303
+ * /osmosis/height -> https://osmosis.numia.xyz/height
+ */
 
 export default {
 	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-		return new Response('Hello World!');
+		try {
+			const apiKey = env[`NUMIA_API_KEY`];
+			if (!apiKey) {
+				return new Response(
+					JSON.stringify({
+						error: 'Environment is missing the NUMIA_API_KEY variable.',
+					}),
+					{ status: 401 }
+				);
+			}
+			const url = new URL(request.url);
+
+			const parts = url.pathname.substring(1).split('/');
+			const [subdomain, ...restPath] = parts;
+
+			const nextUrl = new URL(`https://${subdomain}.numia.xyz/${restPath.join('/')}`);
+			nextUrl.search = url.search;
+
+			return fetch(nextUrl, {
+				method: request.method,
+				body: request.body,
+				headers: {
+					authorization: `Bearer ${apiKey}`,
+					...request.headers,
+				},
+			});
+		} catch (error) {
+			return new Response(
+				JSON.stringify({
+					error: 'The middleware was not able to load the data and got an error response from the server.',
+				}),
+				{ status: 500 }
+			);
+		}
 	},
 };
